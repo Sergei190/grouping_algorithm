@@ -5,6 +5,7 @@ import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
+import java.util.stream.Collectors;
 import java.util.zip.GZIPInputStream;
 
 public class GroupingAlgorithm {
@@ -16,7 +17,7 @@ public class GroupingAlgorithm {
         try {
             List<String> lines = readFile(filePath);
             List<String> validLines = filterValidLines(lines);
-            Map<String, List<String>> groupedLines = groupLines(validLines);
+            Map<String, Set<String>> groupedLines = groupLines(validLines);
             saveGroupsToFile(groupedLines, scanner);
 
             int groupCount = countGroupsWithMultipleElements(groupedLines);
@@ -43,33 +44,31 @@ public class GroupingAlgorithm {
     }
 
     private static List<String> filterValidLines(List<String> lines) {
-        List<String> validLines = new ArrayList<>();
-        for (String line : lines) {
-            String[] values = line.split(";");
-            if (values.length > 1) {
-                validLines.add(line);
-            }
-        }
-        return validLines;
+        return lines.parallelStream()
+                .filter(line -> {
+                    String[] values = line.split(";");
+                    return values.length > 1;
+                })
+                .collect(Collectors.toList());
     }
 
-    private static Map<String, List<String>> groupLines(List<String> lines) {
-        Map<String, List<String>> groups = new HashMap<>();
+    private static Map<String, Set<String>> groupLines(List<String> lines) {
+        Map<String, Set<String>> groups = new HashMap<>();
         for (String line : lines) {
-            boolean isNewGroup = true;
+            Set<String> groupRef = null;
 
-            for (Map.Entry<String, List<String>> entry : groups.entrySet()) {
+            for (Map.Entry<String, Set<String>> entry : groups.entrySet()) {
                 String groupMember = entry.getKey();
-
                 if (hasSharedValues(line, groupMember)) {
-                    entry.getValue().add(line);
-                    isNewGroup = false;
+                    groupRef = entry.getValue();
                     break;
                 }
             }
 
-            if (isNewGroup) {
-                List<String> newGroup = new ArrayList<>();
+            if (groupRef != null) {
+                groupRef.add(line);
+            } else {
+                Set<String> newGroup = new HashSet<>();
                 newGroup.add(line);
                 groups.put(line, newGroup);
             }
@@ -90,34 +89,37 @@ public class GroupingAlgorithm {
         return false;
     }
 
-    private static void saveGroupsToFile(Map<String, List<String>> groups, Scanner scanner) throws IOException {
-        List<String> outputLines = new ArrayList<>();
-        int groupCount = 0;
-
-        for (Map.Entry<String, List<String>> entry : groups.entrySet()) {
-            List<String> group = entry.getValue();
-            if (group.size() > 1) {
-                groupCount++;
-                outputLines.add("Группа " + groupCount);
-                for (String line : group) {
-                    outputLines.add(line);
-                }
-                outputLines.add("");
-            }
-        }
-
-        outputLines.add(0, "Количество групп с более чем одним элементом: " + groupCount);
-
+    private static void saveGroupsToFile(Map<String, Set<String>> groups, Scanner scanner) throws IOException {
         System.out.print("Введите путь для сохранения результата (например, output.txt): ");
         String outputPath = scanner.nextLine();
         Path outputFilePath = Path.of(outputPath);
-        Files.write(outputFilePath, outputLines);
+
+        try (BufferedWriter writer = Files.newBufferedWriter(outputFilePath)) {
+            int groupCount = 0;
+
+            for (Map.Entry<String, Set<String>> entry : groups.entrySet()) {
+                Set<String> group = entry.getValue();
+                if (group.size() > 1) {
+                    groupCount++;
+                    writer.write("Группа " + groupCount);
+                    writer.newLine();
+                    for (String line : group) {
+                        writer.write(line);
+                        writer.newLine();
+                    }
+                    writer.newLine();
+                }
+            }
+
+            writer.write("Количество групп с более чем одним элементом: " + groupCount);
+        }
+
         System.out.println("Результат сохранен в файле: " + outputFilePath);
     }
 
-    private static int countGroupsWithMultipleElements(Map<String, List<String>> groups) {
+    private static int countGroupsWithMultipleElements(Map<String, Set<String>> groups) {
         int count = 0;
-        for (Map.Entry<String, List<String>> entry : groups.entrySet()) {
+        for (Map.Entry<String, Set<String>> entry : groups.entrySet()) {
             if (entry.getValue().size() > 1) {
                 count++;
             }
