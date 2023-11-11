@@ -80,6 +80,10 @@ public class GroupingAlgorithm {
         String[] values1 = line1.split(";");
         String[] values2 = line2.split(";");
 
+        if (values1.length != values2.length) {
+            return false;
+        }
+
         for (int i = 0; i < values1.length; i++) {
             if (!values1[i].isEmpty() && !values2[i].isEmpty() && values1[i].equals(values2[i])) {
                 return true;
