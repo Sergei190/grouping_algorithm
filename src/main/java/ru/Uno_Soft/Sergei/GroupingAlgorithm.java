@@ -3,54 +3,93 @@ package ru.Uno_Soft.Sergei;
 import java.io.*;
 import java.net.URL;
 import java.util.*;
-import java.util.regex.Pattern;
-import java.util.zip.GZIPInputStream;
 
 public class GroupingAlgorithm {
     public static void main(String[] args) throws IOException {
         long startTime = System.currentTimeMillis();
-        Map<String, Set<String>> groups = new HashMap<>();
 
-        try (Scanner scanner = new Scanner(new GZIPInputStream(new URL("https://github.com/PeacockTeam/new-job/releases/download/v1.0/lng-4.txt.gz").openStream()))){
-            while (scanner.hasNextLine()) {
-                String line = scanner.nextLine();
-                if (Pattern.matches("^[^;]*(;[^;]*)*$", line)) {
-                    String[] elements = line.split(";");
-                    for (Map.Entry<String, Set<String>> entry : new HashMap<>(groups).entrySet()) {
-                        for (String value : elements) {
-                            if (entry.getKey().contains(value)) {
-                                entry.getValue().add(line);
-                                groups.put(line, entry.getValue());
-                                groups.remove(entry.getKey());
-                                break;
-                            }
+        if (args.length == 0) {
+            System.out.println("Необходимо указать URL файла в аргументах командной строки");
+            return;
+        }
+
+        String fileUrl = args[0];
+
+        try {
+            List<Set<String>> groups = findGroups(fileUrl);
+            saveGroupsToFile(groups);
+        } catch (IOException e) {
+            System.out.println("Произошла ошибка при обработке файла: " + e.getMessage());
+        }
+
+        long executionTime = System.currentTimeMillis() - startTime;
+        System.out.println("Количество групп с более чем одним элементом: " + getGroupsWithMoreThanOneElement(findGroups(fileUrl)));
+        System.out.println("Время выполнения программы: " + executionTime + " мс");
+    }
+
+    private static List<Set<String>> findGroups(String fileUrl) throws IOException {
+        List<Set<String>> groups = new ArrayList<>();
+        Map<String, Set<String>> groupMap = new HashMap<>();
+
+        URL url = new URL(fileUrl);
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(url.openStream()))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (isValidLine(line)) {
+                    Set<String> existingGroup = null;
+                    for (String value : line.split(";")) {
+                        existingGroup = groupMap.get(value);
+                        if (existingGroup != null) {
+                            break;
                         }
                     }
-                    if (!groups.containsKey(line)) {
-                        groups.put(line, new HashSet<>(Set.of(line)));
+
+                    if (existingGroup != null) {
+                        existingGroup.add(line);
+                    } else {
+                        Set<String> newGroup = new HashSet<>();
+                        newGroup.add(line);
+                        groups.add(newGroup);
+                        for (String value : line.split(";")) {
+                            groupMap.put(value, newGroup);
+                        }
                     }
                 }
             }
         }
 
-        List<Set<String>> groupList = new ArrayList<>(groups.values());
+        return groups;
+    }
 
-        groupList.sort((g1, g2) -> Integer.compare(g2.size(), g1.size()));
+    private static boolean isValidLine(String line) {
+        return line.matches("[^;\n]+(;[^;\n]+)*");
+    }
 
-        int groupCount = 0;
+    private static void saveGroupsToFile(List<Set<String>> groups) throws IOException {
+        groups.sort((g1, g2) -> Integer.compare(g2.size(), g1.size()));
 
-        for (Set<String> group : groupList) {
-            if (group.size() > 1) {
-                groupCount++;
-                System.out.println("Group " + groupCount);
-                for (String str : group) {
-                    System.out.println(str);
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter("output.txt"))) {
+            writer.write("Количество групп с более чем одним элементом: " + getGroupsWithMoreThanOneElement(groups) + "\n");
+            writer.newLine();
+
+            for (int i = 0; i < groups.size(); i++) {
+                Set<String> group = groups.get(i);
+                writer.write("Группа " + (i + 1) + "\n");
+                for (String line : group) {
+                    writer.write(line + "\n");
                 }
-                System.out.println();
+                writer.newLine();
             }
         }
+    }
 
-        long endTime = System.currentTimeMillis();
-        System.out.println("Execution time: " + (endTime - startTime) + " ms");
+    private static int getGroupsWithMoreThanOneElement(List<Set<String>> groups) {
+        int count = 0;
+        for (Set<String> group : groups) {
+            if (group.size() > 1) {
+                count++;
+            }
+        }
+        return count;
     }
 }
